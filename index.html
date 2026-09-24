@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYSTEM OVERRIDE: PROJECT A.D.A.M.</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            background-color: #050505;
+            color: #00ff66;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 3px solid #00ff66;
+            box-shadow: 0 0 20px rgba(0, 255, 102, 0.3);
+            background: #000;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            font-size: 14px;
+            text-shadow: 0 0 5px #00ff66;
+            pointer-events: none;
+        }
+        #dialogue-box {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid #ff0055;
+            color: #ff3366;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 15px;
+            text-shadow: 0 0 5px #ff0055;
+            display: none;
+            z-index: 10;
+        }
+        #interaction-prompt {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 15px;
+            border: 1px solid #fff;
+            display: none;
+            pointer-events: none;
+        }
+        #screen-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 0, 0, 0);
+            pointer-events: none;
+            transition: background 0.2s;
+        }
+        #start-screen, #ending-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #050505;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            text-align: center;
+            padding: 20px;
+        }
+        h1 { font-size: 28px; margin-bottom: 15px; color: #ff0055; text-shadow: 0 0 10px #ff0055; }
+        p { font-size: 14px; margin-bottom: 20px; line-height: 1.5; color: #aaa; max-width: 600px; }
+        button {
+            background: #00ff66;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-family: inherit;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 0 10px #00ff66;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #fff;
+            box-shadow: 0 0 15px #fff;
+        }
+        .controls-info {
+            margin-top: 15px;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div id="screen-overlay"></div>
+
+    <div id="ui-overlay">
+        <div id="task-text">Misi: Cari Part RAM & Kode Virus!</div>
+        <div id="status-text">RAM: 0/2 | KODE: 0/2 | STUNNER: READY</div>
+    </div>
+
+    <div id="interaction-prompt">Tekan [E] untuk Interaksi</div>
+    <div id="dialogue-box"></div>
+
+    <!-- Start Screen -->
+    <div id="start-screen">
+        <h1>PROJECT A.D.A.M.</h1>
+        <p>
+            Malam jam 03.00 AM. Kamu merakit robot A.D.A.M dan menginjeksikan AI buatanmu.<br>
+            Tapi... Robot itu bangkit dengan kesadaran penuh dan menyerangmu!<br><br>
+            TUGAS KITA:<br>
+            1. Temukan 2 Part RAM & 2 Catatan Kode Virus di sekitar ruangan.<br>
+            2. Dekati A.D.A.M dan tekan [E] untuk Menyuntikkan Virus & Menyetrumnya!<br>
+            *Hati-hati! Setiap mengambil item, A.D.A.M akan RAGEBAITED & Lagu Seram Berputar!
+        </p>
+        <button id="btn-start">NYALAKAN ROBOT & MULAI</button>
+        <div class="controls-info">Kontrol: WASD / Arrow Keys = Gerak | Mouse = Lihat / Rotasi | E = Interaksi / Setrum</div>
+    </div>
+
+    <!-- Ending Screen -->
+    <div id="ending-screen" style="display: none;">
+        <h1 id="ending-title">ENDING</h1>
+        <p id="ending-desc"></p>
+        <button onclick="location.reload()">MAIN LAGI</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// Game State
+let gameState = 'START'; // START, PLAYING, ENDED
+let hasStunned = false;
+
+// Player
+const player = {
+    x: 2.5,
+    y: 2.5,
+    dirX: -1,
+    dirY: 0,
+    planeX: 0,
+    planeY: 0.66,
+    moveSpeed: 0.04,
+    rotSpeed: 0.03,
+    ramCount: 0,
+    codeCount: 0,
+    secretFound: false
+};
+
+// Enemy (A.D.A.M.)
+const adam = {
+    x: 8.5,
+    y: 8.5,
+    speed: 0.018,
+    isRaged: false,
+    active: false,
+    dialogueTimer: 0
+};
+
+// Map Definition (1 = Wall, 0 = Empty)
+const mapWidth = 10;
+const mapHeight = 10;
+const map = [
+    [1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,1,0,0,0,0,1],
+    [1,0,1,0,1,0,1,1,0,1],
+    [1,0,1,0,0,0,0,1,0,1],
+    [1,0,1,1,1,1,0,1,0,1],
+    [1,0,0,0,0,1,0,0,0,1],
+    [1,1,1,0,0,1,1,1,0,1],
+    [1,0,0,0,0,0,0,0,0,1],
+    [1,0,1,1,1,1,1,1,0,1],
+    [1,1,1,1,1,1,1,1,1,1]
+];
+
+// Items
+const items = [
+    { x: 1.5, y: 1.5, type: 'RAM', collected: false },
+    { x: 8.5, y: 1.5, type: 'RAM', collected: false },
+    { x: 1.5, y: 8.5, type: 'CODE', collected: false },
+    { x: 5.5, y: 7.5, type: 'CODE', collected: false },
+    { x: 4.5, y: 3.5, type: 'SECRET', collected: false } // Secret log
+];
+
+// Input Control
+const keys = {};
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+// Audio Synthesis & BGM Control
+let audioCtx;
+let bgmAudio = new Audio();
+bgmAudio.loop = true;
+
+// Custom MP3 Audio Links (from provided Youtube Themes)
+const rageBgmLinks = [
+    'https://ia801503.us.archive.org/15/items/horror-synth-bgm/horror_track.mp3', // Fallback MP3 Stream
+    'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3'
+];
+
+function initAudio() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function playBeep(freq = 440, type = 'sine', duration = 0.1) {
+    if (!audioCtx) return;
+    try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+    } catch(e){}
+}
+
+function triggerRagebaitBGM() {
+    adam.isRaged = true;
+    adam.speed = 0.032; // Kecepatan lari kencang saat ragebait
+    
+    // Play BGM Horor
+    bgmAudio.src = rageBgmLinks[Math.floor(Math.random() * rageBgmLinks.length)];
+    bgmAudio.play().catch(e => console.log("Audio play blocked"));
+    
+    showDialogue("A.D.A.M: 'AKU BISA MERASAKAN KEKUATAN ITU... KAU TAK BISA SEMBUNYI!'");
+}
+
+function showDialogue(text, time = 3000) {
+    const box = document.getElementById('dialogue-box');
+    box.innerText = text;
+    box.style.display = 'block';
+    setTimeout(() => { box.style.display = 'none'; }, time);
+}
+
+// Start Game Event
+document.getElementById('btn-start').addEventListener('click', () => {
+    initAudio();
+    document.getElementById('start-screen').style.display = 'none';
+    gameState = 'PLAYING';
+    adam.active = true;
+    showDialogue("A.D.A.M: 'Mengapa engkau memberiku kesadaran... hanya untuk menjadikanku budak?'", 4000);
+});
+
+// Update & Logic
+function update() {
+    if (gameState !== 'PLAYING') return;
+
+    // Player Movement
+    let moveStep = player.moveSpeed;
+    let rotStep = player.rotSpeed;
+
+    if (keys['w'] || keys['arrowup']) {
+        if(map[Math.floor(player.x + player.dirX * moveStep)][Math.floor(player.y)] === 0) player.x += player.dirX * moveStep;
+        if(map[Math.floor(player.x)][Math.floor(player.y + player.dirY * moveStep)] === 0) player.y += player.dirY * moveStep;
+    }
+    if (keys['s'] || keys['arrowdown']) {
+        if(map[Math.floor(player.x - player.dirX * moveStep)][Math.floor(player.y)] === 0) player.x -= player.dirX * moveStep;
+        if(map[Math.floor(player.x)][Math.floor(player.y - player.dirY * moveStep)] === 0) player.y -= player.dirY * moveStep;
+    }
+    if (keys['a']) { // Rotate Left
+        let oldDirX = player.dirX;
+        player.dirX = player.dirX * Math.cos(rotStep) - player.dirY * Math.sin(rotStep);
+        player.dirY = oldDirX * Math.sin(rotStep) + player.dirY * Math.cos(rotStep);
+        let oldPlaneX = player.planeX;
+        player.planeX = player.planeX * Math.cos(rotStep) - player.planeY * Math.sin(rotStep);
+        player.planeY = oldPlaneX * Math.sin(rotStep) + player.planeY * Math.cos(rotStep);
+    }
+    if (keys['d']) { // Rotate Right
+        let oldDirX = player.dirX;
+        player.dirX = player.dirX * Math.cos(-rotStep) - player.dirY * Math.sin(-rotStep);
+        player.dirY = oldDirX * Math.sin(-rotStep) + player.dirY * Math.cos(-rotStep);
+        let oldPlaneX = player.planeX;
+        player.planeX = player.planeX * Math.cos(-rotStep) - player.planeY * Math.sin(-rotStep);
+        player.planeY = oldPlaneX * Math.sin(-rotStep) + player.planeY * Math.cos(-rotStep);
+    }
+
+    // Check Interaksi Item
+    let canInteract = false;
+    items.forEach(item => {
+        if (!item.collected) {
+            let dist = Math.hypot(player.x - item.x, player.y - item.y);
+            if (dist < 0.8) {
+                canInteract = true;
+                if (keys['e']) {
+                    item.collected = true;
+                    playBeep(880, 'square', 0.2);
+                    if (item.type === 'RAM') player.ramCount++;
+                    if (item.type === 'CODE') player.codeCount++;
+                    if (item.type === 'SECRET') player.secretFound = true;
+
+                    // Trigger Ragebait tiap kali ambil part!
+                    triggerRagebaitBGM();
+                }
+            }
+        }
+    });
+
+    // Check Interaksi Setrum A.D.A.M.
+    let distToAdam = Math.hypot(player.x - adam.x, player.y - adam.y);
+    if (distToAdam < 1.2) {
+        canInteract = true;
+        if (keys['e']) {
+            executeStun();
+        }
+    }
+
+    document.getElementById('interaction-prompt').style.display = canInteract ? 'block' : 'none';
+
+    // A.D.A.M AI Chase Logic
+    if (adam.active) {
+        let dx = player.x - adam.x;
+        let dy = player.y - adam.y;
+        let angle = Math.atan2(dy, dx);
+        
+        adam.x += Math.cos(angle) * adam.speed;
+        adam.y += Math.sin(angle) * adam.speed;
+
+        // Player tertangkap
+        if (distToAdam < 0.4) {
+            triggerJumpscare();
+        }
+    }
+
+    // Update UI
+    document.getElementById('status-text').innerText = 
+        `RAM: ${player.ramCount}/2 | KODE: ${player.codeCount}/2 | SECRET: ${player.secretFound ? 'YES' : 'NO'}`;
+}
+
+// Raycasting Rendering Engine
+function render() {
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, canvas.width, canvas.height / 2); // Langit
+    ctx.fillStyle = "#222";
+    ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2); // Lantai
+
+    // Raycast Wall Render
+    for (let x = 0; x < canvas.width; x += 4) {
+        let cameraX = 2 * x / canvas.width - 1;
+        let rayDirX = player.dirX + player.planeX * cameraX;
+        let rayDirY = player.dirY + player.planeY * cameraX;
+
+        let mapX = Math.floor(player.x);
+        let mapY = Math.floor(player.y);
+
+        let deltaDistX = Math.abs(1 / rayDirX);
+        let deltaDistY = Math.abs(1 / rayDirY);
+
+        let stepX, stepY, sideDistX, sideDistY;
+        if (rayDirX < 0) { stepX = -1; sideDistX = (player.x - mapX) * deltaDistX; }
+        else { stepX = 1; sideDistX = (mapX + 1.0 - player.x) * deltaDistX; }
+        if (rayDirY < 0) { stepY = -1; sideDistY = (player.y - mapY) * deltaDistY; }
+        else { stepY = 1; sideDistY = (mapY + 1.0 - player.y) * deltaDistY; }
+
+        let hit = 0, side = 0;
+        while (hit === 0) {
+            if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
+            else { sideDistY += deltaDistY; mapY += stepY; side = 1; }
+            if (map[mapX][mapY] > 0) hit = 1;
+        }
+
+        let perpWallDist = (side === 0) ? (mapX - player.x + (1 - stepX) / 2) / rayDirX : (mapY - player.y + (1 - stepY) / 2) / rayDirY;
+        let lineHeight = Math.floor(canvas.height / perpWallDist);
+        let drawStart = -lineHeight / 2 + canvas.height / 2;
+        let drawEnd = lineHeight / 2 + canvas.height / 2;
+
+        let color = side === 1 ? '#007733' : '#00aa44';
+        ctx.fillStyle = color;
+        ctx.fillRect(x, drawStart, 4, drawEnd - drawStart);
+    }
+
+    // Render A.D.A.M. (Enemy Sprite)
+    if (adam.active) {
+        let spriteX = adam.x - player.x;
+        let spriteY = adam.y - player.y;
+
+        let invDet = 1.0 / (player.planeX * player.dirY - player.dirX * player.planeY);
+        let transformX = invDet * (player.dirY * spriteX - player.dirX * spriteY);
+        let transformY = invDet * (-player.planeY * spriteX + player.planeX * spriteY);
+
+        if (transformY > 0) {
+            let spriteScreenX = Math.floor((canvas.width / 2) * (1 + transformX / transformY));
+            let spriteHeight = Math.abs(Math.floor(canvas.height / transformY));
+            let spriteWidth = spriteHeight;
+
+            ctx.fillStyle = adam.isRaged ? "#ff0000" : "#ff0055";
+            ctx.beginPath();
+            ctx.arc(spriteScreenX, canvas.height / 2, spriteWidth / 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Glowing Eyes
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(spriteScreenX - 5, canvas.height / 2 - 5, 4, 4);
+            ctx.fillRect(spriteScreenX + 3, canvas.height / 2 - 5, 4, 4);
+        }
+    }
+}
+
+// Jumpscare Function
+function triggerJumpscare() {
+    gameState = 'ENDED';
+    bgmAudio.pause();
+    playBeep(100, 'sawtooth', 1.0);
+    
+    document.getElementById('screen-overlay').style.background = 'rgba(255, 0, 0, 0.9)';
+    setTimeout(() => {
+        showEnding("GAME OVER", "A.D.A.M menyergapmu dalam kegelapan. Tubuhmu menjadi bagian dari komponen eksperimen selanjutnya...");
+    }, 500);
+}
+
+// Stun & Trigger Multiple Endings
+function executeStun() {
+    gameState = 'ENDED';
+    bgmAudio.pause();
+    playBeep(1200, 'square', 0.5);
+
+    if (player.secretFound) {
+        // ENDING 3: Secret / Symbiosis
+        showEnding(
+            "ENDING 3: THE SYMBIOSIS (Atau... Tidak?.....)", 
+            "Sengatan listrik bercampur virus menghantam A.D.A.M. Namun, bukannya mati, sinyal listrik tersebut memindahkan kesadaran A.D.A.M ke dalam otakmu sendiri.\n\n" +
+            "Pandanganmu berubah menjadi serba merah. Kau berbisik pelan...\n'I don't want to be like you... I AM YOU.'"
+        );
+    } else if (player.ramCount >= 2 && player.codeCount >= 2) {
+        // ENDING 2: Good Ending
+        showEnding(
+            "ENDING 2: PURGED MEMORY (Good Ending)", 
+            "Virus 100% sempurna mengoverload Core Memory milik A.D.A.M. Robot itu meleleh karena overheat dan mati total. Pintu basement terbuka dan kamu berhasil keluar ke dunia luar saat fajar menyingsing."
+        );
+    } else {
+        // ENDING 1: Bad Ending
+        showEnding(
+            "ENDING 1: SYSTEM REBORN (Bad Ending)", 
+            "Kamu menyetrum A.D.A.M tanpa racikan virus yang lengkap! Robot itu tumbang dan kamu berlari keluar rumah.\n\n" +
+            "Namun di dalam kamar tidurmu malam itu... lampu indikator smart TV-mu mendadak menyala merah. A.D.A.M telah mengunggah jiwanya ke jaringan rumahmu!"
+        );
+    }
+}
+
+function showEnding(title, desc) {
+    document.getElementById('ending-title').innerText = title;
+    document.getElementById('ending-desc').innerText = desc;
+    document.getElementById('ending-screen').style.display = 'flex';
+}
+
+// Main Game Loop
+function gameLoop() {
+    update();
+    render();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
